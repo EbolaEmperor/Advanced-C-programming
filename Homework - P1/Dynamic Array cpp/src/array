@@ -1,0 +1,6 @@
+#ifndef ARRAY_HPP_INCLUDED
+
+#define ARRAY_HPP_INCLUDED
+#include "array.hpp"
+
+#endif
