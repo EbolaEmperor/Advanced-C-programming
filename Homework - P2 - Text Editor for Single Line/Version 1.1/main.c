@@ -63,7 +63,7 @@ void paintWK(){    //用来绘制翁恺老师的头像
     endPaint();
 }
 
-int getTextWidth(int textSize){    //获取字体的宽度
+int getTextWidth(){    //获取字体的宽度
     switch (textFont){
         case 0:    //Consolas 字体宽度
             if(textSize >= 32) return (textSize / 2) - 1;
@@ -88,13 +88,17 @@ int getTextWidth(int textSize){    //获取字体的宽度
     }
 }
 
+int chineseWidth(){
+    if(textFont != 1) return 2 * getTextWidth() + 1;
+    else return  2 * getTextWidth() - 1;
+}
+
 int calcCaretPos(){
     int pos = 0;
-    int width = getTextWidth(textSize);
+    int width = getTextWidth();
     for(int i = 0; i < curPosition; i++){
         if(inputText[i] < 0){
-            if(textFont != 1) pos += 2 * width + 1;
-            else pos += 2 * width - 1;
+            pos += chineseWidth();
             i++;
         }
         else pos += width;
@@ -114,9 +118,10 @@ void paintTextBox(){    //绘制文本框
     setPenColor(WHITE);
     setTextColor(BLACK);
     setBrushColor(WHITE);
-    rectangle(50, 80, 955, 130);
+    rectangle(0, 80, 1000, 130);
     setPenColor(BLACK);
-    rectangle(50, 80, 955, 90 + textSize);
+    line(0, 80, 1000, 80);
+    line(0, 90 + textSize, 1000, 90 + textSize);
 
     //文本
     setTextFont(fontName[textFont]);
@@ -159,6 +164,8 @@ void paintFunctionBar(){    //绘制文本框上方的功能区
     beginPaint();
     setTextFont("Consolas");
     setPenColor(BLACK);
+    setTextBkColor(WHITE);
+    setTextColor(BLACK);
     setTextSize(20);
     static char outText[32];
     sprintf(outText, "Size:     %d", textSize);
@@ -222,8 +229,38 @@ void paintFunctionBar(){    //绘制文本框上方的功能区
     endPaint();
 }
 
+void paintCaret(){
+    beginPaint();
+    setPenColor(BLACK);
+    if(insertMode){
+        setPenWidth(2);
+        int pos = calcCaretPos();
+        line(60 + pos, 84, 60 + pos, 87 + textSize);
+    } else {
+        setBrushColor(BLACK);
+        int pos = calcCaretPos();
+        int width = isGBKfirst(curPosition) ? chineseWidth() : getTextWidth();
+        rectangle(60 + pos, 84, 60 + pos + width, 87 + textSize);
+        setTextColor(WHITE);
+        setTextBkColor(EMPTY);
+        setTextSize(textSize);
+        static char tmps[3];
+        if(isGBKfirst(curPosition)){
+            tmps[0] = inputText[curPosition];
+            tmps[1] = inputText[curPosition + 1];
+            tmps[2] = '\0';
+        } else {
+            tmps[0] = inputText[curPosition];
+            tmps[1] = '\0';
+        }
+        paintText(60 + pos, 83, tmps);
+    }
+    endPaint();
+}
+
 void paint(){    //绘图函数
     paintTextBox();
+    paintCaret();
     paintStatusBar();
     paintFunctionBar();
 }
@@ -250,11 +287,11 @@ void inputEvent(char c){    //处理输入一个字符的事件
 
 void updateFontWidth(){
     int preMaxLength = maxLength;
-    maxLength = 890 / getTextWidth(textSize);
+    maxLength = 890 / getTextWidth();
     for(int i=maxLength; i<preMaxLength; i++){
         inputText[i] = 0;
     }
-    if(inputText[maxLength - 1] < 0)
+    if(isGBKfirst(maxLength - 1))
         inputText[maxLength - 1] = 0;
     curPosition = min(curPosition, strlen(inputText));
 }
@@ -267,14 +304,12 @@ void mouseEvent(int x, int y, int key, int event){
                 mouseHoldSizeMinus = 1;
                 textSize--;
                 updateFontWidth();
-                resetCaretSize();
             }
             if(x>=178 && x<=200 && y>=35 && y<=57){
                 if(textSize == 40) return;
                 mouseHoldSizePlus = 1;
                 textSize++;
                 updateFontWidth();
-                resetCaretSize();
             }
             if(x>=323 && x<=345 && y>=35 && y<=57){
                 mouseHoldColorChange = 1;
@@ -313,20 +348,21 @@ void enter(){
     curPosition = 0;
 }
 
-void resetCaretSize(){
-    if(insertMode){
-        setCaretSize(2, textSize);
-    } else {
-        setCaretSize(getTextWidth(textSize), textSize);
-    }
-    showCaret();
-}
-
 int isGBK(int pos){    //判断pos位置上的字符是不是中文的GBK编码
     for(int i = 0; i < pos; i++){
         if(inputText[i] < 0){
             if(pos == i + 1) return 1;
             i++;
+        }
+    }
+    return inputText[pos] < 0;
+}
+
+int isGBKfirst(int pos){    //判断pos位置上的字符是不是中文GBK编码中的第一个编码
+    if(inputText[pos] >= 0) return 0;
+    for(int i = 0; i < pos; i++){
+        if(inputText[i] < 0){
+            if(++i == pos) return 0;
         }
     }
     return inputText[pos] < 0;
@@ -365,7 +401,7 @@ void keyboardEvent(int key, int event){    //处理键盘事件
     } else {
         int step = 1;
         switch (key){
-            case VK_INSERT: insertMode ^= 1; resetCaretSize(); break;
+            case VK_INSERT: insertMode ^= 1; break;
             case VK_LEFT:
                 moving = 1;
                 if(isGBK(curPosition - 1)) step = 2;
@@ -392,15 +428,22 @@ void charEvent(char c){
     paint();
 }
 
+void timeEvent(int tid){    //时间戳，用来处理光标的显示与消失
+    if(clock()%1000 < 500){
+        paintCaret();
+    } else {
+        paintTextBox();
+    }
+}
+
 int Setup(){
     initWindow("Text Editor for Single Line                       developed by Ebola", 200, 50, 1000, 700);
     initConsole();
-    setCaretSize(2, textSize);
-    setCaretPos(60 + getTextWidth(textSize) * curPosition, 85);
-    showCaret();
     registerKeyboardEvent(keyboardEvent);
     registerCharEvent(charEvent);
     registerMouseEvent(mouseEvent);
+    registerTimerEvent(timeEvent);
+    startTimer(0, 250);
     paint();
     paintWKButton(0);
     return 0;
